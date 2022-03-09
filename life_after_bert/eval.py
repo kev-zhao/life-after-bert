@@ -10,13 +10,13 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
 
     Args:
         model:
-            any pretrained transformers.AutoModelForMaskedLM()
+            Any pretrained transformers.AutoModelForMaskedLM()
         tokenizer:
-            tokenizer used to convert the text into word IDs
-            in our case we use a RobertaTokenizer
-            this only needs to be specified once at the start of the program because cached results will be used afterwards
+            Tokenizer for model
+            As eval_dataset already has tokenized input ids, tokenizer is only used for determining the mask token
+            and encoding answer choices.
         task:
-            type of task, among `oLMpics MLM`  # TODO: add more tasks
+            Type of task, among `oLMpics MLM`  # TODO: add more tasks
         eval_dataset:
             life_after_bert.data.MCDataset() containing task data
         device:

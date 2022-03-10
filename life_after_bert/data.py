@@ -5,6 +5,7 @@ import sys
 import random
 import tqdm
 
+import torch
 from torch.utils.data import Dataset
 
 
@@ -94,3 +95,19 @@ class MCDataset(Dataset):
             "choice_list": self.choices[i],
             "answer_id": self.answer_ids[i],
         }
+
+
+def collate_fn(batch):
+    batch_dict = {}
+    for key in batch[0].keys():
+        batch_dict[key] = []
+
+    for single_dict in batch:
+        for key, value in single_dict.items():
+            batch_dict[key].append(value)
+
+    for key, value in batch_dict.items():
+        if key != "choice_list":
+            batch_dict[key] = torch.tensor(value)
+
+    return batch_dict

@@ -43,21 +43,20 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
     MASK_ID = MASK_ID[0]
 
     if task == "oLMpics MLM":
-        eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False)
+        eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
         all_answers = []
         all_preds = []
 
         for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
 
-            # batch["choice_list"] is size (num_choices, batch_size)
-            for i in range(len(batch["choice_list"][0])):
-                all_answers.append(batch["choice_list"][batch["answer_id"][i]][i])
+            for batch_index in range(len(batch["choice_list"])):
+                all_answers.append(batch["choice_list"][batch_index][batch["answer_id"][batch_index]])
 
             choice_lists = batch.pop("choice_list")
             del batch["answer_id"]
-            for key in batch:
-                batch[key] = torch.stack(batch[key], dim=-1).to(device)
+            for key, value in batch.items():
+                batch[key] = value.to(device)
 
             with torch.no_grad():
                 outputs = model(**batch)
@@ -65,17 +64,19 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
                 logits = outputs.logits
 
                 # TODO: parallelize
-                for i, logit in enumerate(logits):  # Assuming all are single tokens
+                for batch_index, logit in enumerate(logits):  # Assuming all are single tokens
                     choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
-                        tokenizer.encode(" " + choice_lists[j][i], add_special_tokens=False, return_tensors="pt").item()
-                        for j in range(len(choice_lists))
+                        tokenizer.encode(
+                            " " + choice_lists[batch_index][num_choices], add_special_tokens=False, return_tensors="pt"
+                        ).item()
+                        for num_choices in range(len(choice_lists[0]))
                     ])
 
-                    MASK_INDEX = batch["input_ids"][i].tolist().index(MASK_ID)
+                    MASK_INDEX = batch["input_ids"][batch_index].tolist().index(MASK_ID)
                     probs = logit[MASK_INDEX].index_select(0, choice_ids.to(device))
 
                     max_ind = torch.argmax(probs)
-                    all_preds.append(choice_lists[max_ind][i])
+                    all_preds.append(choice_lists[batch_index][max_ind])
 
         return all_answers, all_preds
     else:
@@ -110,8 +111,8 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device, 
 
             choice_lists = batch.pop("choice_list")
             del batch["answer_id"]
-            for key in batch:
-                batch[key] = batch[key].to(device)
+            for key, value in batch.items():
+                batch[key] = value.to(device)
 
             choice_probs = []
             for choice_index in range(num_choices):

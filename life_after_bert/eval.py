@@ -72,8 +72,8 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
                         for num_choices in range(len(choice_lists[0]))
                     ])
 
-                    MASK_INDEX = batch["input_ids"][batch_index].tolist().index(MASK_ID)
-                    probs = logit[MASK_INDEX].index_select(0, choice_ids.to(device))
+                    mask_index = batch["input_ids"][batch_index].tolist().index(MASK_ID)
+                    probs = logit[mask_index].index_select(0, choice_ids.to(device))
 
                     max_ind = torch.argmax(probs)
                     all_preds.append(choice_lists[batch_index][max_ind])
@@ -133,6 +133,54 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device, 
 
             for batch_index, max_ind in enumerate(max_inds):
                 all_preds.append(choice_lists[batch_index][max_ind])
+
+        return all_answers, all_preds
+    else:
+        raise NotImplementedError
+
+
+def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decoder_input_ids, device, mask_token=None, batch_size=16):
+    mask_token = mask_token if mask_token is not None else tokenizer.mask_token  # TODO: same code in data.py
+    assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
+    MASK_ID = tokenizer.encode(mask_token, add_special_tokens=False)
+    assert len(MASK_ID) == 1
+    MASK_ID = MASK_ID[0]
+
+    if task == "oLMpics MLM":
+        eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
+        all_answers = []
+        all_preds = []
+
+        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating"):
+            model.eval()
+
+            for batch_index in range(len(batch["choice_list"])):
+                all_answers.append(batch["choice_list"][batch_index][batch["answer_id"][batch_index]])
+
+            choice_lists = batch.pop("choice_list")
+            del batch["answer_id"]
+            for key, value in batch.items():
+                batch[key] = value.to(device)
+
+            with torch.no_grad():
+                outputs = model(
+                    **batch, decoder_input_ids=static_decoder_input_ids.repeat(len(batch["input_ids"]), 1).to(device)
+                )
+
+                logits = outputs.logits
+
+                # TODO: parallelize
+                for batch_index, logit in enumerate(logits):  # Assuming all are single tokens
+                    choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
+                        tokenizer.encode(
+                            " " + choice_lists[batch_index][num_choices], add_special_tokens=False, return_tensors="pt"
+                        ).item()
+                        for num_choices in range(len(choice_lists[0]))
+                    ])
+
+                    probs = logit[1].index_select(0, choice_ids.to(device))
+                    max_ind = torch.argmax(probs)
+                    all_preds.append(choice_lists[batch_index][max_ind])
 
         return all_answers, all_preds
     else:

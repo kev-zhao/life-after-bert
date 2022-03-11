@@ -171,12 +171,25 @@ def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decode
 
                 # TODO: parallelize
                 for batch_index, logit in enumerate(logits):  # Assuming all are single tokens
-                    choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
-                        tokenizer.encode(
-                            " " + choice_lists[batch_index][num_choices], add_special_tokens=False, return_tensors="pt"
-                        ).item()
-                        for num_choices in range(len(choice_lists[0]))
-                    ])
+                    try:
+                        choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
+                            tokenizer.encode(
+                                " " + choice_lists[batch_index][num_choices], add_special_tokens=False, return_tensors="pt"
+                            ).item()
+                            for num_choices in range(len(choice_lists[0]))
+                        ])
+                    except ValueError:
+                        choice_ids = torch.tensor([
+                            tokenizer.encode(
+                                " " + choice_lists[batch_index][num_choices], add_special_tokens=False,
+                                return_tensors="pt"
+                            ).squeeze(0)[0]
+                            for num_choices in range(len(choice_lists[0]))
+                        ])
+
+                        for num_choices in range(len(choice_lists[0])):
+                            if len(tokenizer.encode(" " + choice_lists[batch_index][num_choices], add_special_tokens=False)) > 1:
+                                print(f"Answer choice more than 1 token: {choice_lists[batch_index][num_choices]}")  # TODO: logger
 
                     probs = logit[1].index_select(0, choice_ids.to(device))
                     max_ind = torch.argmax(probs)

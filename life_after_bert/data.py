@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(os.path.basename(__file__))
 
 
-def load_olmpics_data(file_path, num_choices, num_samples=-1):
+def load_olmpics_data(file_path, num_choices, num_samples=-1, progress_bar=True):
     """
     Adapted from https://github.com/alontalmor/oLMpics/blob/500bdfc5779736bd7258925f53516fb126fe3245/oLMpics
     /allennlp_models/dataset_readers/transformer_masked_lm_reader.py#L53
@@ -31,7 +31,7 @@ def load_olmpics_data(file_path, num_choices, num_samples=-1):
     if num_samples != -1:
         item_jsons = random.sample(item_jsons, num_samples)
 
-    for i, item_json in tqdm.tqdm(enumerate(item_jsons), total=len(item_jsons)):
+    for i, item_json in tqdm.tqdm(enumerate(item_jsons), total=len(item_jsons), disable=not progress_bar):
         question_text = item_json["question"]["stem"]
 
         choice_label_to_id = {}

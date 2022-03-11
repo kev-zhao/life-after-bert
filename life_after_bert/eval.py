@@ -6,7 +6,7 @@ from life_after_bert.data import collate_fn
 from life_after_bert.utils import get_sentence_prob
 
 
-def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=None, batch_size=16):
+def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=None, batch_size=16, progress_bar=True):
     """
     Evaluates any HuggingFace encoder model on a MLM task
     [Explanation of how evaluation works]
@@ -47,7 +47,7 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
         all_answers = []
         all_preds = []
 
-        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating"):
+        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
             model.eval()
 
             for batch_index in range(len(batch["choice_list"])):
@@ -65,12 +65,26 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
 
                 # TODO: parallelize
                 for batch_index, logit in enumerate(logits):  # Assuming all are single tokens
-                    choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
-                        tokenizer.encode(
-                            " " + choice_lists[batch_index][num_choices], add_special_tokens=False, return_tensors="pt"
-                        ).item()
-                        for num_choices in range(len(choice_lists[0]))
-                    ])
+                    try:
+                        choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
+                            tokenizer.encode(
+                                " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
+                                return_tensors="pt"
+                            ).item()
+                            for choice_index in range(len(choice_lists[0]))
+                        ])
+                    except ValueError:
+                        choice_ids = torch.tensor([
+                            tokenizer.encode(
+                                " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
+                                return_tensors="pt"
+                            ).squeeze(0)[0]
+                            for choice_index in range(len(choice_lists[0]))
+                        ])
+
+                        for num_choices in range(len(choice_lists[0])):
+                            if len(tokenizer.encode(" " + choice_lists[batch_index][num_choices], add_special_tokens=False)) > 1:
+                                print(f"Answer choice more than 1 token: {choice_lists[batch_index][num_choices]}")  # TODO: logger
 
                     mask_index = batch["input_ids"][batch_index].tolist().index(MASK_ID)
                     probs = logit[mask_index].index_select(0, choice_ids.to(device))
@@ -83,7 +97,8 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
         raise NotImplementedError
 
 
-def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device, mask_token=None, batch_size=16):
+def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device,
+                     mask_token=None, batch_size=16, progress_bar=True):
     mask_token = mask_token if mask_token is not None else tokenizer.mask_token  # TODO: duplicate code
     assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
     MASK_ID = tokenizer.encode(mask_token, add_special_tokens=False)
@@ -96,7 +111,7 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device, 
         all_answers = []
         all_preds = []
 
-        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating"):
+        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
             model.eval()
 
             mask_indices = []
@@ -117,9 +132,16 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device, 
             choice_probs = []
             for choice_index in range(num_choices):
                 for batch_index in range(len(mask_indices)):
-                    batch["input_ids"][batch_index][mask_indices[batch_index]] = tokenizer.encode(
-                        " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
-                        return_tensors="pt").item()
+                    try:
+                        batch["input_ids"][batch_index][mask_indices[batch_index]] = tokenizer.encode(
+                            " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
+                            return_tensors="pt").item()
+                    except ValueError:
+                        batch["input_ids"][batch_index][mask_indices[batch_index]] = tokenizer.encode(
+                            " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
+                            return_tensors="pt").squeeze(0)[0]
+
+                        print(f"Answer choice more than 1 token: {choice_lists[batch_index][choice_index]}")
 
                 with torch.no_grad():
                     outputs = model(**batch)
@@ -139,7 +161,8 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device, 
         raise NotImplementedError
 
 
-def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decoder_input_ids, device, mask_token=None, batch_size=16):
+def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decoder_input_ids, device,
+                             mask_token=None, batch_size=16, progress_bar=True):
     mask_token = mask_token if mask_token is not None else tokenizer.mask_token  # TODO: same code in data.py
     assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
     MASK_ID = tokenizer.encode(mask_token, add_special_tokens=False)
@@ -151,7 +174,7 @@ def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decode
         all_answers = []
         all_preds = []
 
-        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating"):
+        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
             model.eval()
 
             for batch_index in range(len(batch["choice_list"])):
@@ -174,17 +197,17 @@ def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decode
                     try:
                         choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
                             tokenizer.encode(
-                                " " + choice_lists[batch_index][num_choices], add_special_tokens=False, return_tensors="pt"
+                                " " + choice_lists[batch_index][choice_index], add_special_tokens=False, return_tensors="pt"
                             ).item()
-                            for num_choices in range(len(choice_lists[0]))
+                            for choice_index in range(len(choice_lists[0]))
                         ])
                     except ValueError:
                         choice_ids = torch.tensor([
                             tokenizer.encode(
-                                " " + choice_lists[batch_index][num_choices], add_special_tokens=False,
+                                " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
                                 return_tensors="pt"
                             ).squeeze(0)[0]
-                            for num_choices in range(len(choice_lists[0]))
+                            for choice_index in range(len(choice_lists[0]))
                         ])
 
                         for num_choices in range(len(choice_lists[0])):

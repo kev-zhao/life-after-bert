@@ -6,8 +6,17 @@ size of the dataset, and pre-training objective on a model's linguistic capabili
 
 ## Installation
 
+You can install the package via
+
 ```bash
-python -m pip install -r requirements.txt
+pip install git+https://github.com/kev-zhao/life-after-bert
+```
+
+Or you can download the source code and install the package in editable mode
+
+```bash
+git clone https://github.com/kev-zhao/life-after-bert
+cd life-after-bert
 pip install -e .
 ```
 

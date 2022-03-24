@@ -6,7 +6,8 @@ from life_after_bert.data import collate_fn
 from life_after_bert.utils import get_sentence_prob
 
 
-def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=None, batch_size=16, progress_bar=True):
+def evaluate_encoder(model, tokenizer, task, eval_dataset, device,
+                     mask_token=None, batch_size=16, progress_bar=True, filter_multi_token_choices=False):
     """
     Evaluates any HuggingFace encoder model on a MLM task
     [Explanation of how evaluation works]
@@ -64,6 +65,7 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
                 logits = outputs.logits
 
                 # TODO: parallelize
+                all_single_tokens = [True] * len(logits)
                 for batch_index, logit in enumerate(logits):  # Assuming all are single tokens
                     try:
                         choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
@@ -74,6 +76,10 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
                             for choice_index in range(len(choice_lists[0]))
                         ])
                     except ValueError:
+                        if filter_multi_token_choices:
+                            all_single_tokens[batch_index] = False
+                            # break
+
                         choice_ids = torch.tensor([
                             tokenizer.encode(
                                 " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
@@ -98,7 +104,7 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device, mask_token=No
 
 
 def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device,
-                     mask_token=None, batch_size=16, progress_bar=True):
+                     mask_token=None, batch_size=16, progress_bar=True, filter_multi_token_choices=False):
     mask_token = mask_token if mask_token is not None else tokenizer.mask_token  # TODO: duplicate code
     assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
     MASK_ID = tokenizer.encode(mask_token, add_special_tokens=False)
@@ -130,6 +136,7 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device,
                 batch[key] = value.to(device)
 
             choice_probs = []
+            all_single_tokens = [True] * len(mask_indices)
             for choice_index in range(num_choices):
                 for batch_index in range(len(mask_indices)):
                     try:
@@ -137,6 +144,9 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device,
                             " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
                             return_tensors="pt").item()
                     except ValueError:
+                        if filter_multi_token_choices:
+                            all_single_tokens[batch_index] = False
+
                         batch["input_ids"][batch_index][mask_indices[batch_index]] = tokenizer.encode(
                             " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
                             return_tensors="pt").squeeze(0)[0]
@@ -154,7 +164,8 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device,
             max_inds = torch.argmax(choice_probs, dim=-1)
 
             for batch_index, max_ind in enumerate(max_inds):
-                all_preds.append(choice_lists[batch_index][max_ind])
+                if all_single_tokens[batch_index]:
+                    all_preds.append(choice_lists[batch_index][max_ind])
 
         return all_answers, all_preds
     else:
@@ -162,7 +173,7 @@ def evaluate_decoder(model, tokenizer, task, num_choices, eval_dataset, device,
 
 
 def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decoder_input_ids, device,
-                             mask_token=None, batch_size=16, progress_bar=True):
+                             mask_token=None, batch_size=16, progress_bar=True, filter_multi_token_choices=False):
     mask_token = mask_token if mask_token is not None else tokenizer.mask_token  # TODO: same code in data.py
     assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
     MASK_ID = tokenizer.encode(mask_token, add_special_tokens=False)
@@ -193,6 +204,7 @@ def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decode
                 logits = outputs.logits
 
                 # TODO: parallelize
+                all_single_tokens = [True] * len(logits)
                 for batch_index, logit in enumerate(logits):  # Assuming all are single tokens
                     try:
                         choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
@@ -202,6 +214,10 @@ def evaluate_encoder_decoder(model, tokenizer, task, eval_dataset, static_decode
                             for choice_index in range(len(choice_lists[0]))
                         ])
                     except ValueError:
+                        if filter_multi_token_choices:
+                            all_single_tokens[batch_index] = False
+                            # break
+
                         choice_ids = torch.tensor([
                             tokenizer.encode(
                                 " " + choice_lists[batch_index][choice_index], add_special_tokens=False,

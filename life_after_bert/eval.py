@@ -232,16 +232,19 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
 
 
 class LaBEvaluator:
+    """
+    Evaluates model on all zero-shot oLMpics MLM tasks.  # TODO: more tasks
+    Constructor takes in no arguments, `evaluator = LaBEvaluator()`
+    """
     ARCH_TO_FUNCTION = {
         "encoder": evaluate_encoder,
         "decoder": evaluate_decoder,
         "encoder decoder": evaluate_encoder_decoder
     }
 
-    def __init__(self):
-        pass
+    def evaluate(self, model, tokenizer, task_infos, model_arch, device="cpu", batch_size=16, task_type="oLMpics MLM",
+                 output_predictions=False, progress_bar=True):
 
-    def evaluate(self, model, tokenizer, task_infos, model_arch, device="cpu", batch_size=16, task_type="oLMpics MLM", output_predictions=False, progress_bar=True):
         eval_fn = self.ARCH_TO_FUNCTION[model_arch.lower()]
         for i, (task_name, num_choices) in enumerate(task_infos):
             dataset = LaB.MCDataset.load_data(task_name, num_choices, task_type, tokenizer)

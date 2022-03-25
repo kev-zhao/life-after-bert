@@ -12,7 +12,7 @@ You can install the package via
 pip install git+https://github.com/kev-zhao/life-after-bert
 ```
 
-Or you can download the source code and install the package in editable mode
+Or you can download the source code and install the package in editable mode:
 
 ```bash
 git clone https://github.com/kev-zhao/life-after-bert
@@ -21,25 +21,33 @@ pip install -e .
 ```
 
 ## Run
-Main.py only works for encoders for now (Thursday 3/10), see notebooks for other model architectures.
 ```bash
-usage: main.py [-h] model_name task data_path num_choices
-
-positional arguments:
-  model_name   Identifier of any pretrained transformers.AutoModelForMaskedLM
-  task         Type of task, among `oLMpics MLM`
-  data_path    Path to jsonl file containing dataset questions
-  num_choices  Number of answer choices for each question
+usage: main.py [-h] [--model_name MODEL_NAME] [--model_arch MODEL_ARCH] [--mask_token MASK_TOKEN] [--task TASK]
 
 optional arguments:
-  -h, --help   show this help message and exit
+  -h, --help            show this help message and exit
+  --model_name MODEL_NAME
+                        Identifier of any pretrained HuggingFace model
+  --model_arch MODEL_ARCH
+                        Model architecture, among `encoder`, `decoder`, and `encoder decoder`
+  --mask_token MASK_TOKEN
+                        Tokenizer mask token (string), if different from default. Mainly used for GPT2 ("[MASK]") and T5 ("<extra_id_0>").
+  --task TASK           Type of task, among `oLMpics MLM`
+
 ```
 
 ### Example:
 ```bash
-python main.py roberta-large "oLMpics MLM" \
-    tests/data/oLMpics_age_comparison_dev.jsonl 2
+python main.py \
+    --model_name roberta-large \
+    --model_arch encoder
 ```
-*Expected output*: `Accuracy: 0.986` 
-
-Read more [here](https://blog.metaflow.fr/tensorflow-a-proposal-of-good-practices-for-files-folders-and-models-architecture-f23171501ae3).
+**Expected output**: 
+```
+Accuracy on Age Comparison: 0.986
+Accuracy on Always Never: 0.1357142857142857
+Accuracy on Antonym Negation: 0.746
+Accuracy on Multihop Composition: 0.28
+Accuracy on Size Comparison: 0.874
+Accuracy on Taxonomy Conjunction: 0.4540901502504174
+``` 

@@ -19,6 +19,10 @@ logger = logging.getLogger(os.path.basename(__file__))
 
 
 class MCDataset(Dataset):
+    """
+    Dataset for oLMpics multiple choice tasks  # TODO: add ettinger
+    `MCDataset().load_data()` can be used for oLMpics tasks  # TODO: create/improve docstrings for this class
+    """
     TASK_TO_FILENAME = {
         "Age Comparison": "oLMpics_age_comparison_dev.jsonl",
         "Always Never": "oLMpics_always_never_dev.jsonl",
@@ -48,7 +52,8 @@ class MCDataset(Dataset):
         for i, curr_choices in enumerate(choices):
             output = tokenizer([" " + curr_choice for curr_choice in curr_choices], add_special_tokens=False, return_tensors="pt", max_length=1,
                                truncation=True, return_overflowing_tokens=True)
-            # TODO: explain below line
+
+            # TODO: explain below lines with commens
             mask = torch.cat([torch.ones(1, dtype=int),
                               output.overflow_to_sample_mapping[1:] - output.overflow_to_sample_mapping[:-1]])
             choice_input_ids = torch.index_select(output.input_ids, 0, torch.nonzero(mask).flatten())

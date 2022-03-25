@@ -6,8 +6,7 @@ from life_after_bert.data import collate_fn
 from life_after_bert.utils import get_sentence_prob
 
 
-def evaluate_encoder(model, tokenizer, task, eval_dataset, device,
-                     mask_token=None, batch_size=16, progress_bar=True, filter_multi_token_choices=False):
+def evaluate_encoder(model, tokenizer, task, eval_dataset, device="cpu", batch_size=16, progress_bar=True):
     """
     Evaluates any HuggingFace encoder model on a MLM task
     [Explanation of how evaluation works]
@@ -31,31 +30,26 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device,
             For T5, `<extra_id_0>` should be specified here.
         batch_size:
             # TODO: distributed
+        progress_bar:
+            Whether or not to use tqdm progress bar
 
     Returns: Tuple of (answers, preds)
         answers - list containing ground truths
         preds - list containing model predictions
     """
 
-    mask_token = mask_token if mask_token is not None else tokenizer.mask_token  # TODO: same code in data.py
-    assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
-    MASK_ID = tokenizer.encode(mask_token, add_special_tokens=False)
-    assert len(MASK_ID) == 1
-    MASK_ID = MASK_ID[0]
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
+    mask_id = tokenizer.mask_token_id
+    all_answers, all_preds = [], []
 
+    model.to(device)
+    model.eval()
     if task == "oLMpics MLM":
-        eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
-        all_answers = []
-        all_preds = []
-
         for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
-            model.eval()
-
-            for batch_index in range(len(batch["choice_list"])):
-                all_answers.append(batch["choice_list"][batch_index][batch["answer_id"][batch_index]])
-
-            choice_lists = batch.pop("choice_list")
+            all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
+            choice_ids = batch.pop("choice_ids")
             del batch["answer_id"]
+
             for key, value in batch.items():
                 batch[key] = value.to(device)
 
@@ -64,40 +58,14 @@ def evaluate_encoder(model, tokenizer, task, eval_dataset, device,
 
                 logits = outputs.logits
 
-                # TODO: parallelize
-                all_single_tokens = [True] * len(logits)
-                for batch_index, logit in enumerate(logits):  # Assuming all are single tokens
-                    try:
-                        choice_ids = torch.tensor([  # .item() will fail if multiple tokens per word
-                            tokenizer.encode(
-                                " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
-                                return_tensors="pt"
-                            ).item()
-                            for choice_index in range(len(choice_lists[0]))
-                        ])
-                    except ValueError:
-                        if filter_multi_token_choices:
-                            all_single_tokens[batch_index] = False
-                            # break
+                mask_index = torch.tensor([input_ids.tolist().index(mask_id) for input_ids in batch["input_ids"]], device=device)
+                mask_logits = logits.gather(1, mask_index.view(-1, 1, 1).expand(-1, 1, logits.size()[-1])).squeeze(1)
+                choice_logits = mask_logits.gather(1, choice_ids.to(device))
+                max_inds = torch.argmax(choice_logits, dim=1).cpu()
+                all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
 
-                        choice_ids = torch.tensor([
-                            tokenizer.encode(
-                                " " + choice_lists[batch_index][choice_index], add_special_tokens=False,
-                                return_tensors="pt"
-                            ).squeeze(0)[0]
-                            for choice_index in range(len(choice_lists[0]))
-                        ])
-
-                        for num_choices in range(len(choice_lists[0])):
-                            if len(tokenizer.encode(" " + choice_lists[batch_index][num_choices], add_special_tokens=False)) > 1:
-                                print(f"Answer choice more than 1 token: {choice_lists[batch_index][num_choices]}")  # TODO: logger
-
-                    mask_index = batch["input_ids"][batch_index].tolist().index(MASK_ID)
-                    probs = logit[mask_index].index_select(0, choice_ids.to(device))
-
-                    max_ind = torch.argmax(probs)
-                    all_preds.append(choice_lists[batch_index][max_ind])
-
+        all_answers = torch.tensor(all_answers)
+        all_preds = torch.tensor(all_preds)
         return all_answers, all_preds
     else:
         raise NotImplementedError

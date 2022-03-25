@@ -32,16 +32,17 @@ class MCDataset(Dataset):
         mask_token = mask_token if mask_token is not None else tokenizer.mask_token
         assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
         questions = [question.replace('[MASK]', mask_token) for question in questions]
-        out = tokenizer(questions, max_length=max_length, padding="max_length")
+        out = tokenizer(questions, max_length=max_length, padding="max_length", return_tensors="pt")
         self.input_ids = out["input_ids"]
         self.attention_mask = out["attention_mask"]
-        self.answer_ids = answer_ids
+        self.answer_ids = torch.tensor(answer_ids)
+        self.num_choices = num_choices
 
         tokenized_choices = []
         truncated_tokens = 0
 
         for i, curr_choices in enumerate(choices):
-            output = tokenizer(curr_choices, add_special_tokens=False, return_tensors="pt", max_length=1,
+            output = tokenizer([" " + curr_choice for curr_choice in curr_choices], add_special_tokens=False, return_tensors="pt", max_length=1,
                                truncation=True, return_overflowing_tokens=True)
             # TODO: explain below line
             mask = torch.cat([torch.ones(1, dtype=int),
@@ -120,13 +121,13 @@ class MCDataset(Dataset):
         #     return cls(...)
 
     def __len__(self):
-        return len(self.questions)
+        return len(self.input_ids)
 
     def __getitem__(self, i):
         return {
             "input_ids": self.input_ids[i],
             "attention_mask": self.attention_mask[i],
-            "choice_list": self.choices[i],
+            "choice_ids": self.choice_ids[i],
             "answer_id": self.answer_ids[i],
         }
 
@@ -141,7 +142,6 @@ def collate_fn(batch):
             batch_dict[key].append(value)
 
     for key, value in batch_dict.items():
-        if key != "choice_list":
-            batch_dict[key] = torch.tensor(value)
+        batch_dict[key] = torch.stack(value, dim=0)
 
     return batch_dict

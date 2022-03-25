@@ -28,15 +28,19 @@ class MCDataset(Dataset):
         "Taxonomy Conjunction": "oLMpics_taxonomy_conjunction_dev.jsonl"
     }
 
-    def __init__(self, questions, choices, answer_ids, tokenizer, num_choices, mask_token=None, max_length=26):
-        mask_token = mask_token if mask_token is not None else tokenizer.mask_token
-        assert mask_token is not None, "mask_token must be provided if tokenizer.mask_token does not exist"
-        questions = [question.replace('[MASK]', mask_token) for question in questions]
+    def __init__(self, questions, choices, answer_ids, num_choices, task_type, tokenizer, max_length=26):
+        assert tokenizer.mask_token is not None
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            logger.warning("Setting tokenizer's pad_token to eos_token")
+
+        questions = [question.replace('[MASK]', tokenizer.mask_token) for question in questions]
         out = tokenizer(questions, max_length=max_length, padding="max_length", return_tensors="pt")
         self.input_ids = out["input_ids"]
         self.attention_mask = out["attention_mask"]
         self.answer_ids = torch.tensor(answer_ids)
         self.num_choices = num_choices
+        self.task_type = task_type
 
         tokenized_choices = []
         truncated_tokens = 0
@@ -57,7 +61,10 @@ class MCDataset(Dataset):
         self.choice_ids = tokenized_choices
 
     @classmethod
-    def load_data(cls, task_name_or_path, num_choices, tokenizer, data_dir=None, num_samples=-1):
+    def load_data(cls, task_name_or_path, num_choices, task_type, tokenizer, data_dir=None, num_samples=-1):
+        if task_type != "oLMpics MLM":
+            raise NotImplementedError
+
         if data_dir is None:
             data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "tests", "data")
 
@@ -112,7 +119,7 @@ class MCDataset(Dataset):
                 choice_lists.append(choice_text_list)
                 answer_ids.append(answer_id)
 
-            return cls(questions, choice_lists, answer_ids, tokenizer, num_choices)
+            return cls(questions, choice_lists, answer_ids, num_choices, task_type, tokenizer)
 
         # elif os.path.exists(task_name_or_path):
         #     # check if it exists, try to load it assuming jsonl

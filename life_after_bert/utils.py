@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 def get_sentence_prob(input_ids, logits, eos_indices):
     # TODO: check with Namrata that "https://github.com/NamrataRShivagunde/oLMpics/blob/gpt2-runs/oLMpics/gpt2_mc_mlm.py" is latest version
     # TODO: improve docstring

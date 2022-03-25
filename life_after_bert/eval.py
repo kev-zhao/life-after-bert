@@ -1,9 +1,21 @@
+import logging
+import os
+import sys
+
 import torch
 from torch.utils.data import DataLoader
-import tqdm
+from tqdm.auto import tqdm
 
-from life_after_bert.data import collate_fn
-from life_after_bert.utils import get_sentence_prob
+import life_after_bert as LaB
+
+
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+    stream=sys.stdout,
+)
+logger = logging.getLogger(os.path.basename(__file__))
 
 
 def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
@@ -37,14 +49,14 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
         preds - tensor containing model predictions, only returned if output_predictions=True
     """
 
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=LaB.collate_fn, shuffle=False)
     mask_id = tokenizer.mask_token_id
     all_answers, all_preds = [], []
 
     model.to(device)
     model.eval()
     if eval_dataset.task_type == "oLMpics MLM":
-        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
+        for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
             all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
             choice_ids = batch.pop("choice_ids")
             del batch["answer_id"]
@@ -106,13 +118,13 @@ def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
         preds - tensor containing model predictions, only returned if output_predictions=True
     """
 
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=LaB.collate_fn, shuffle=False)
     all_answers, all_preds = [], []
 
     model.to(device)
     model.eval()
     if eval_dataset.task_type == "oLMpics MLM":
-        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
+        for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
             mask_indices = [input_ids.tolist().index(tokenizer.mask_token_id) for input_ids in batch["input_ids"]]
             eos_indices = [input_ids.tolist().index(tokenizer.eos_token_id) for input_ids in batch["input_ids"]]
 
@@ -132,7 +144,7 @@ def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
                     outputs = model(**batch)
 
                 logits = outputs.logits
-                sentence_probs = get_sentence_prob(batch["input_ids"], logits, eos_indices)
+                sentence_probs = LaB.get_sentence_prob(batch["input_ids"], logits, eos_indices)
                 choice_probs.append(sentence_probs)
 
             choice_probs = torch.stack(choice_probs, dim=1)
@@ -183,13 +195,13 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
         preds - tensor containing model predictions, only returned if output_predictions=True
     """
 
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=LaB.collate_fn, shuffle=False)
     all_answers, all_preds = [], []
 
     model.to(device)
     model.eval()
     if eval_dataset.task_type == "oLMpics MLM":
-        for batch in tqdm.tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
+        for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
             all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
             choice_ids = batch.pop("choice_ids")
             del batch["answer_id"]
@@ -217,3 +229,31 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
         return output
     else:
         raise NotImplementedError
+
+
+class LaBEvaluator:
+    ARCH_TO_FUNCTION = {
+        "encoder": evaluate_encoder,
+        "decoder": evaluate_decoder,
+        "encoder decoder": evaluate_encoder_decoder
+    }
+
+    def __init__(self):
+        pass
+
+    def evaluate(self, model, tokenizer, task_infos, model_arch, device="cpu", batch_size=16, task_type="oLMpics MLM", output_predictions=False, progress_bar=True):
+        eval_fn = self.ARCH_TO_FUNCTION[model_arch.lower()]
+        for i, (task_name, num_choices) in enumerate(task_infos):
+            dataset = LaB.MCDataset.load_data(task_name, num_choices, task_type, tokenizer)
+            if model_arch.lower() == "encoder decoder":
+                if i == 0:
+                    logger.warning("Assuming T5.")
+
+                static_decoder_input_ids = tokenizer("<pad> <extra_id_0>", add_special_tokens=False,
+                                                     return_tensors="pt").input_ids
+                results = eval_fn(model, dataset, static_decoder_input_ids, device=device, batch_size=batch_size, output_predictions=output_predictions, progress_bar=progress_bar)
+            else:
+                results = eval_fn(model, tokenizer, dataset, device=device, batch_size=batch_size,
+                                  output_predictions=output_predictions, progress_bar=progress_bar)
+
+            logger.info(f"Accuracy on {task_name}: {results[0]}")  # TODO: return (all_answers, all_preds)

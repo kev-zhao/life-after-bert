@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 import random
-import tqdm
+from tqdm.auto import tqdm
 
 import torch
 from torch.utils.data import Dataset
@@ -22,7 +22,7 @@ class MCDataset(Dataset):
     TASK_TO_FILENAME = {
         "Age Comparison": "oLMpics_age_comparison_dev.jsonl",
         "Always Never": "oLMpics_always_never_dev.jsonl",
-        "Antonym Negation": "oLMpics_antonym_negation_dev.json",
+        "Antonym Negation": "oLMpics_antonym_negation_dev.jsonl",
         "Multihop Composition": "oLMpics_multihop_composition_dev.jsonl",
         "Size Comparison": "oLMpics_size_comparison_dev.jsonl",
         "Taxonomy Conjunction": "oLMpics_taxonomy_conjunction_dev.jsonl"
@@ -56,7 +56,7 @@ class MCDataset(Dataset):
             tokenized_choices.append(choice_input_ids.squeeze(1))
 
         if truncated_tokens > 0:
-            logger.warning(f"Truncated {truncated_tokens} tokens.")
+            logger.warning(f"Truncated {truncated_tokens} tokens from answer choices.")
 
         self.choice_ids = tokenized_choices
 
@@ -80,7 +80,7 @@ class MCDataset(Dataset):
             if num_samples != -1:
                 item_jsons = random.sample(item_jsons, num_samples)
 
-            for i, item_json in tqdm.tqdm(enumerate(item_jsons), total=len(item_jsons), disable=True):
+            for i, item_json in tqdm(enumerate(item_jsons), total=len(item_jsons), disable=True):
                 question_text = item_json["question"]["stem"]
 
                 choice_label_to_id = {}

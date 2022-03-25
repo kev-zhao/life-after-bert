@@ -8,35 +8,33 @@ from life_after_bert.utils import get_sentence_prob
 
 def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
     """
-    Evaluates any HuggingFace encoder model on a MLM task
-    [Explanation of how evaluation works]
+    Evaluates any HuggingFace Encoder model.
+
+    A model's prediction is determined by the probabilities assigned to the mask token.
+    The answer choice with the highest probability is selected chosen as the prediction.
+    See Section 3.2 -- "MC-MLM vs. MC-QA" -- for more details.
 
     Args:
         model:
             Any pretrained transformers.AutoModelForMaskedLM()
         tokenizer:
             Tokenizer for model
-            As eval_dataset already has tokenized input ids, tokenizer is only used for determining the mask token
-            and encoding answer choices.
-        task:
-            Type of task, among `oLMpics MLM`  # TODO: add more tasks
+            As eval_dataset already has tokenized input ids, tokenizer is only used for determining the mask token.  # TODO: pass in mask_token_id instead of tokenizer?
         eval_dataset:
-            life_after_bert.data.MCDataset() containing task data
+            life_after_bert.MCDataset()
         device:
             "cuda" or "cpu"  # TODO: cuda:0/cuda:1?
-        mask_token:
-            Model mask token, if different from default (`[MASK]` for BERT, `<mask>` for RoBERTa).
-            Main use case is for models like T5, which do not have a mask_token by default in HuggingFace;
-            For T5, `<extra_id_0>` should be specified here.
         batch_size:
             # TODO: distributed
+        output_predictions:
+            Whether or not to return predictions and labels
         progress_bar:
             Whether or not to use tqdm progress bar
 
     Returns: accuracy, (answers, preds)
-        accuracy - TODO
-        answers - tensor containing ground truths
-        preds - tensor containing model predictions
+        accuracy - model accuracy on task
+        answers - tensor containing ground truths, only returned if output_predictions=True
+        preds - tensor containing model predictions, only returned if output_predictions=True
     """
 
     eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
@@ -78,14 +76,34 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
 
 def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
     """
-    TODO
-    :param model:
-    :param tokenizer:
-    :param eval_dataset:
-    :param device:
-    :param batch_size:
-    :param progress_bar:
-    :return:
+    Evaluates any HuggingFace Decoder model.
+
+    To allow for bidirectionality, the mask token is replaced with each answer choice
+    And the sum of the log probabilities is calculated for each sentence.
+    A model's prediction is the choice with the highest total probability.
+    See Section 3.2 -- "Extending Beyond MLM" -- for more details.
+
+    Args:
+        model:
+            Any pretrained transformers.AutoModelForCausalLM()
+        tokenizer:
+            Tokenizer for model
+            As eval_dataset already has tokenized input ids, tokenizer is only used for determining the mask token
+        eval_dataset:
+            life_after_bert.MCDataset()
+        device:
+            "cuda" or "cpu"
+        batch_size:
+
+        output_predictions:
+            Whether or not to return predictions and labels
+        progress_bar:
+            Whether or not to use tqdm progress bar
+
+    Returns: accuracy, (answers, preds)
+        accuracy - model accuracy on task
+        answers - tensor containing ground truths, only returned if output_predictions=True
+        preds - tensor containing model predictions, only returned if output_predictions=True
     """
 
     eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
@@ -135,6 +153,36 @@ def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
 
 
 def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
+    """
+    Evaluates any HuggingFace Encoder Decoder model.
+
+    A model's prediction is determined by the probabilities assigned to the mask token.  # TODO: exact same as evaluate_encoder()
+    The answer choice with the highest probability is selected chosen as the prediction.
+    See Section 3.2 -- "MC-MLM vs. MC-QA" -- for more details.
+
+    Args:
+        model:
+            Any pretrained transformers.T5ForConditionalGeneration()  # TODO: BART
+        eval_dataset:
+            life_after_bert.MCDataset()
+        static_decoder_input_ids:
+            torch.tensor() with the token ids of the decoder prompt
+            E.g. "<pad> <extra_id_0" for T5, because T5 reuses the pad token for the decoder start generation token
+        device:
+            "cuda" or "cpu"  # TODO: cuda:0/cuda:1?
+        batch_size:
+            # TODO: distributed
+        output_predictions:
+            Whether or not to return predictions and labels
+        progress_bar:
+            Whether or not to use tqdm progress bar
+
+    Returns: accuracy, (answers, preds)
+        accuracy - model accuracy on task
+        answers - tensor containing ground truths, only returned if output_predictions=True
+        preds - tensor containing model predictions, only returned if output_predictions=True
+    """
+
     eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
     all_answers, all_preds = [], []
 

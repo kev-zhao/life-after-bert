@@ -121,11 +121,8 @@ class MCDataset(Dataset):
 
             return cls(questions, choice_lists, answer_ids, num_choices, task_type, tokenizer)
 
-        # elif os.path.exists(task_name_or_path):
-        #     # check if it exists, try to load it assuming jsonl
-        #     assert task_name is not None
-        #     stuff = load_olmpics_data(...)
-        #     return cls(...)
+        elif os.path.exists(task_name_or_path):
+            raise NotImplementedError
 
     def __len__(self):
         return len(self.input_ids)
@@ -140,6 +137,7 @@ class MCDataset(Dataset):
 
 
 def collate_fn(batch):
+    """ Collate function for using MCDataset with torch DataLoader """
     batch_dict = {}
     for key in batch[0].keys():
         batch_dict[key] = []

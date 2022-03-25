@@ -35,11 +35,11 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
         eval_dataset:
             life_after_bert.MCDataset()
         device:
-            "cuda" or "cpu"  # TODO: cuda:0/cuda:1?
+            torch device to perform evaluation on
         batch_size:
             # TODO: distributed
         output_predictions:
-            Whether or not to return predictions and labels
+            Whether or not to return labels and predictions
         progress_bar:
             Whether or not to use tqdm progress bar
 
@@ -55,35 +55,36 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
 
     model.to(device)
     model.eval()
-    if eval_dataset.task_type == "oLMpics MLM":
-        for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
-            all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
-            choice_ids = batch.pop("choice_ids")
-            del batch["answer_id"]
 
-            for key, value in batch.items():
-                batch[key] = value.to(device)
+    if eval_dataset.task_type.lower() != "oLMpics MLM".lower():
+        raise NotImplementedError("Only oLMpics MLM is supported")
 
-            with torch.no_grad():
-                outputs = model(**batch)
+    for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
+        all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
+        choice_ids = batch.pop("choice_ids")
+        del batch["answer_id"]
 
-                logits = outputs.logits
+        for key, value in batch.items():
+            batch[key] = value.to(device)
 
-                mask_indices = torch.tensor([input_ids.tolist().index(mask_id) for input_ids in batch["input_ids"]], device=device)
-                mask_logits = logits.gather(1, mask_indices.view(-1, 1, 1).expand(-1, 1, logits.size()[-1])).squeeze(1)
-                choice_logits = mask_logits.gather(1, choice_ids.to(device))
-                max_inds = torch.argmax(choice_logits, dim=1).cpu()
-                all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
+        with torch.no_grad():
+            outputs = model(**batch)
 
-        all_answers = torch.tensor(all_answers)  # TODO: only track if output_predictions?
-        all_preds = torch.tensor(all_preds)
-        output = ((all_answers.numpy() == all_preds.numpy()).mean(),)
-        if output_predictions:
-            output += ((all_answers, all_preds),)
+            logits = outputs.logits
 
-        return output
-    else:
-        raise NotImplementedError
+            mask_indices = torch.tensor([input_ids.tolist().index(mask_id) for input_ids in batch["input_ids"]], device=device)
+            mask_logits = logits.gather(1, mask_indices.view(-1, 1, 1).expand(-1, 1, logits.size()[-1])).squeeze(1)
+            choice_logits = mask_logits.gather(1, choice_ids.to(device))
+            max_inds = torch.argmax(choice_logits, dim=1).cpu()
+            all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
+
+    all_answers = torch.tensor(all_answers)  # TODO: only track if output_predictions?
+    all_preds = torch.tensor(all_preds)
+    output = ((all_answers.numpy() == all_preds.numpy()).mean(),)
+    if output_predictions:
+        output += ((all_answers, all_preds),)
+
+    return output
 
 
 def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
@@ -104,11 +105,11 @@ def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
         eval_dataset:
             life_after_bert.MCDataset()
         device:
-            "cuda" or "cpu"
+            torch device to perform evaluation on
         batch_size:
 
         output_predictions:
-            Whether or not to return predictions and labels
+            Whether or not to return labels and predictions
         progress_bar:
             Whether or not to use tqdm progress bar
 
@@ -123,45 +124,46 @@ def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
 
     model.to(device)
     model.eval()
-    if eval_dataset.task_type == "oLMpics MLM":
-        for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
-            mask_indices = [input_ids.tolist().index(tokenizer.mask_token_id) for input_ids in batch["input_ids"]]
-            eos_indices = [input_ids.tolist().index(tokenizer.eos_token_id) for input_ids in batch["input_ids"]]
 
-            all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
-            choice_ids = batch.pop("choice_ids")
-            del batch["answer_id"]
+    if eval_dataset.task_type.lower() != "oLMpics MLM".lower():
+        raise NotImplementedError("Only oLMpics MLM is supported")
 
-            for key, value in batch.items():
-                batch[key] = value.to(device)
+    for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
+        mask_indices = [input_ids.tolist().index(tokenizer.mask_token_id) for input_ids in batch["input_ids"]]
+        eos_indices = [input_ids.tolist().index(tokenizer.eos_token_id) for input_ids in batch["input_ids"]]
 
-            choice_probs = []
-            for choice_index in range(eval_dataset.num_choices):
-                for batch_index in range(len(mask_indices)):  # TODO: remove loop
-                    batch["input_ids"][batch_index][mask_indices[batch_index]] = choice_ids[batch_index][choice_index]
+        all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
+        choice_ids = batch.pop("choice_ids")
+        del batch["answer_id"]
 
-                with torch.no_grad():
-                    outputs = model(**batch)
+        for key, value in batch.items():
+            batch[key] = value.to(device)
 
-                logits = outputs.logits
-                sentence_probs = LaB.get_sentence_prob(batch["input_ids"], logits, eos_indices)
-                choice_probs.append(sentence_probs)
+        choice_probs = []
+        for choice_index in range(eval_dataset.num_choices):
+            for batch_index in range(len(mask_indices)):  # TODO: remove loop
+                batch["input_ids"][batch_index][mask_indices[batch_index]] = choice_ids[batch_index][choice_index]
 
-            choice_probs = torch.stack(choice_probs, dim=1)
-            max_inds = torch.argmax(choice_probs, dim=1).cpu()
+            with torch.no_grad():
+                outputs = model(**batch)
 
-            all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
+            logits = outputs.logits
+            sentence_probs = LaB.get_sentence_prob(batch["input_ids"], logits, eos_indices)
+            choice_probs.append(sentence_probs)
 
-        all_answers = torch.tensor(all_answers)
-        all_preds = torch.tensor(all_preds)
+        choice_probs = torch.stack(choice_probs, dim=1)
+        max_inds = torch.argmax(choice_probs, dim=1).cpu()
 
-        output = ((all_answers.numpy() == all_preds.numpy()).mean(),)
-        if output_predictions:
-            output += ((all_answers, all_preds),)
+        all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
 
-        return output
-    else:
-        raise NotImplementedError
+    all_answers = torch.tensor(all_answers)
+    all_preds = torch.tensor(all_preds)
+
+    output = ((all_answers.numpy() == all_preds.numpy()).mean(),)
+    if output_predictions:
+        output += ((all_answers, all_preds),)
+
+    return output
 
 
 def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
@@ -179,9 +181,9 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
             life_after_bert.MCDataset()
         static_decoder_input_ids:
             torch.tensor() with the token ids of the decoder prompt
-            E.g. "<pad> <extra_id_0" for T5, because T5 reuses the pad token for the decoder start generation token
+            E.g. "<pad> <extra_id_0>" for T5, because T5 reuses the pad token for the decoder start generation token
         device:
-            "cuda" or "cpu"  # TODO: cuda:0/cuda:1?
+            torch device to perform evaluation on
         batch_size:
             # TODO: distributed
         output_predictions:
@@ -200,35 +202,36 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
 
     model.to(device)
     model.eval()
-    if eval_dataset.task_type == "oLMpics MLM":
-        for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
-            all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
-            choice_ids = batch.pop("choice_ids")
-            del batch["answer_id"]
 
-            for key, value in batch.items():
-                batch[key] = value.to(device)
+    if eval_dataset.task_type.lower() != "oLMpics MLM".lower():
+        raise NotImplementedError("Only oLMpics MLM is supported")
 
-            with torch.no_grad():
-                outputs = model(
-                    **batch, decoder_input_ids=static_decoder_input_ids.expand(len(batch["input_ids"]), -1).to(device)
-                )
+    for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
+        all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
+        choice_ids = batch.pop("choice_ids")
+        del batch["answer_id"]
 
-                logits = outputs.logits
-                choice_logits = logits[:, 1, :].gather(1, choice_ids.to(device))
-                max_inds = torch.argmax(choice_logits, dim=1).cpu()
-                all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
+        for key, value in batch.items():
+            batch[key] = value.to(device)
 
-        all_answers = torch.tensor(all_answers)
-        all_preds = torch.tensor(all_preds)
+        with torch.no_grad():
+            outputs = model(
+                **batch, decoder_input_ids=static_decoder_input_ids.expand(len(batch["input_ids"]), -1).to(device)
+            )
 
-        output = ((all_answers.numpy() == all_preds.numpy()).mean(),)
-        if output_predictions:
-            output += ((all_answers, all_preds),)
+            logits = outputs.logits
+            choice_logits = logits[:, 1, :].gather(1, choice_ids.to(device))
+            max_inds = torch.argmax(choice_logits, dim=1).cpu()
+            all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
 
-        return output
-    else:
-        raise NotImplementedError
+    all_answers = torch.tensor(all_answers)
+    all_preds = torch.tensor(all_preds)
+
+    output = ((all_answers.numpy() == all_preds.numpy()).mean(),)
+    if output_predictions:
+        output += ((all_answers, all_preds),)
+
+    return output
 
 
 class LaBEvaluator:

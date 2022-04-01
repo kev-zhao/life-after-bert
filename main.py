@@ -26,8 +26,8 @@ def get_args():
     """ Set hyperparameters """
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--model_name", help="Identifier of any pretrained HuggingFace model")
-    parser.add_argument("--model_arch", help="Model architecture, among `encoder`, `decoder`, and `encoder decoder`")
+    parser.add_argument("--model_name", required=True, help="Identifier of any pretrained HuggingFace model")
+    parser.add_argument("--model_arch", required=True, help="Model architecture, among `encoder`, `decoder`, and `encoder decoder`")
     parser.add_argument(
         "--mask_token",
         help='Tokenizer mask token (string), if different from default. '

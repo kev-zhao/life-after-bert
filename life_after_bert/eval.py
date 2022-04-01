@@ -242,7 +242,7 @@ class LaBEvaluator:
     ARCH_TO_FUNCTION = {
         "encoder": evaluate_encoder,
         "decoder": evaluate_decoder,
-        "encoder decoder": evaluate_encoder_decoder
+        "encoder-decoder": evaluate_encoder_decoder
     }
 
     def evaluate(self, model, tokenizer, task_infos, model_arch, device="cpu", batch_size=16, task_type="oLMpics MLM",
@@ -251,7 +251,7 @@ class LaBEvaluator:
         eval_fn = self.ARCH_TO_FUNCTION[model_arch.lower()]
         for i, (task_name, num_choices) in enumerate(task_infos):
             dataset = LaB.MCDataset.load_data(task_name, num_choices, task_type, tokenizer)
-            if model_arch.lower() == "encoder decoder":
+            if model_arch.lower() == "encoder-decoder":
                 if i == 0:
                     logger.warning("Assuming T5.")
 

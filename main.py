@@ -9,7 +9,7 @@ from life_after_bert import LaBEvaluator
 ARCH_TO_CLASS = {
     "encoder": transformers.AutoModelForMaskedLM,
     "decoder": transformers.AutoModelForCausalLM,
-    "encoder decoder": transformers.T5ForConditionalGeneration
+    "encoder-decoder": transformers.T5ForConditionalGeneration
 }
 
 TASK_INFOS = [
@@ -27,7 +27,7 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--model_name", required=True, help="Identifier of any pretrained HuggingFace model")
-    parser.add_argument("--model_arch", required=True, help="Model architecture, among `encoder`, `decoder`, and `encoder decoder`")
+    parser.add_argument("--model_arch", required=True, help="Model architecture, among `encoder`, `decoder`, and `encoder-decoder`")
     parser.add_argument(
         "--mask_token",
         help='Tokenizer mask token (string), if different from default. '

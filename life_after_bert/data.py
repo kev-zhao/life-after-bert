@@ -21,6 +21,8 @@ logger = logging.getLogger(os.path.basename(__file__))
 class MCDataset(Dataset):
     """
     Dataset for oLMpics multiple choice tasks  # TODO: add ettinger
+    Can be initialized either with `MCDataset().load_data()` for an oLMpics task,
+    Or by directly with the constructor
     `MCDataset().load_data()` can be used for oLMpics tasks  # TODO: create/improve docstrings for this class
     """
     TASK_TO_FILENAME = {

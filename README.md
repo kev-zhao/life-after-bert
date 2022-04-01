@@ -51,3 +51,12 @@ Accuracy on Multihop Composition: 0.28
 Accuracy on Size Comparison: 0.874
 Accuracy on Taxonomy Conjunction: 0.4540901502504174
 ``` 
+
+### Tested Models:
+* BERT
+* RoBERTa
+* DistilBERT
+* T5
+* BART (due to the HuggingFace implementation, this works as an encoder instead of encoder-decoder)
+* Pegasus (Seq2Seq model, not included in paper)
+* GPT2

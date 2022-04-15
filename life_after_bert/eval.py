@@ -18,7 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger(os.path.basename(__file__))
 
 
-def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
+def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16,
+                     output_predictions=True, output_topk=0, progress_bar=True):
     """
     Evaluates any HuggingFace Encoder model.
 
@@ -40,18 +41,24 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
             # TODO: distributed
         output_predictions:
             Whether or not to return labels and predictions
+        output_topk:
+            The top k answer ids will be returned (this value must be an integer)
+            The default value of 0 means that no ids will be returned
+            A value of 1 will be equivalent to `output_predictions=True` (which returns the top prediction along with the ground truth label)
         progress_bar:
             Whether or not to use tqdm progress bar
 
-    Returns: accuracy, (answers, preds)
+    Returns: accuracy, (answers, preds, all_top_preds)
         accuracy - model accuracy on task
-        answers - tensor containing ground truths, only returned if output_predictions=True
-        preds - tensor containing model predictions, only returned if output_predictions=True
+        answers - tensor containing ground truths, only returned if output_predictions=True or output_topk=1
+        preds - tensor containing model predictions, only returned if output_predictions=True or output_topk=1
+        all_top_preds - tensor containing topk model predictions, only returned if output_topk > 1
     """
 
+    output_predictions = True if output_topk == 1 else output_predictions
     eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=LaB.collate_fn, shuffle=False)
     mask_id = tokenizer.mask_token_id
-    all_answers, all_preds = [], []
+    all_answers, all_preds, all_top_preds = ([] for _ in range(3))
 
     model.to(device)
     model.eval()
@@ -77,12 +84,20 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
             choice_logits = mask_logits.gather(1, choice_ids.to(device))
             max_inds = torch.argmax(choice_logits, dim=1).cpu()
             all_preds.extend(choice_ids.gather(1, max_inds.unsqueeze(1)).squeeze(1).tolist())
+            if output_topk > 1:
+                all_top_preds.append(torch.topk(mask_logits, output_topk, dim=-1).indices.cpu())
 
     all_answers = torch.tensor(all_answers)  # TODO: only track if output_predictions?
     all_preds = torch.tensor(all_preds)
+    if output_topk > 1:
+        all_top_preds = torch.cat(all_top_preds, dim=0)
+
     output = ((all_answers.numpy() == all_preds.numpy()).mean(),)
     if output_predictions:
-        output += ((all_answers, all_preds),)
+        if output_topk > 1:
+            output += ((all_answers, all_preds, all_top_preds),)
+        else:
+            output += ((all_answers, all_preds),)
 
     return output
 

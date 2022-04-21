@@ -76,6 +76,18 @@ class MCDataset(Dataset):
 
     @classmethod
     def load_data(cls, task_name_or_path, num_choices, tokenizer, num_samples=-1):
+        """
+        Creates MCDataset from .jsonl file
+
+        Args:
+            task_name_or_path: Either an oLMpics task name (see all options from MCDataset.TASK_TO_FILENAME)
+                               Or the path to a .jsonl file
+            num_choices: Number of answer choices per question
+            tokenizer: HuggingFace tokenizer
+            num_samples: Number of samples to take for debugging, default value of -1 will load all samples
+
+        Returns: MCDataset
+        """
         if task_name_or_path in cls.TASK_TO_FILENAME.keys():
             data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "tests", "data")
             task_name_or_path = os.path.join(data_dir, cls.TASK_TO_FILENAME[task_name_or_path])

@@ -84,7 +84,7 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
             if output_topk > 1:
                 all_top_preds.append(torch.topk(mask_logits, output_topk, dim=-1).indices.cpu())
 
-    all_answers = torch.tensor(all_answers)  # TODO: only track if output_predictions?
+    all_answers = torch.tensor(all_answers)
     all_preds = torch.tensor(all_preds)
     if output_topk > 1:
         all_top_preds = torch.cat(all_top_preds, dim=0)
@@ -187,7 +187,7 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
 
     Args:
         model:
-            Any pretrained transformers.T5ForConditionalGeneration()  # TODO: BART
+            Any pretrained transformers.T5ForConditionalGeneration()
         eval_dataset:
             life_after_bert.MCDataset()
         static_decoder_input_ids:

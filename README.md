@@ -12,7 +12,7 @@ You can install the package via
 pip install git+https://github.com/kev-zhao/life-after-bert
 ```
 
-Or you can download the source code and install the package in editable mode:
+Or **(recommended)** you can download the source code and install the package in editable mode:
 
 ```bash
 git clone https://github.com/kev-zhao/life-after-bert

@@ -52,6 +52,47 @@ python main.py \
 }
 ``` 
 
+### Python Examples:
+```python
+import torch, transformers
+import life_after_bert
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Use an encoder model
+model = transformers.AutoModelForMaskedLM.from_pretrained("roberta-large")
+tokenizer = transformers.AutoTokenizer.from_pretrained("roberta-large")
+# Evaluate on an oLMpics task
+dataset = life_after_bert.MCDataset.load_data("Age Comparison", num_choices=2, tokenizer=tokenizer)
+accuracy, (all_answers, all_preds) = life_after_bert.evaluate_encoder(model, tokenizer, dataset, device=device)
+print(f"{model.config._name_or_path} accuracy: {accuracy} on Age Comparison task")
+```
+```python
+# Use a decoder model
+model = transformers.AutoModelForCausalLM.from_pretrained("gpt2-large")
+tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2-large", mask_token="[MASK]")  # Causal LM's don't have mask tokens by default
+# Evaluate on a custom dataset (from jsonl file)
+dataset = life_after_bert.MCDataset.load_data("../tests/data/oLMpics_always_never_dev.jsonl", num_choices=5, tokenizer=tokenizer)
+accuracy, (all_answers, all_preds) = life_after_bert.evaluate_decoder(model, tokenizer, dataset, device=device)
+print(f"{model.config._name_or_path} accuracy: {accuracy} on Always Never task")
+```
+```python
+# Or evaluate on multiple tasks
+evaluator = life_after_bert.LaBEvaluator()
+task_infos = [
+    ("Antonym Negation", 2),  # You can use the name of an oLMpics task
+    ("Taxonomy Conjunction", 3),
+    ("../tests/data/oLMpics_multihop_composition_dev.jsonl", 3),  # Or pass in the file paths
+    ("../tests/data/oLMpics_size_comparison_dev.jsonl", 2),
+]
+
+# Use an encoder-decoder model
+model = transformers.AutoModelForSeq2SeqLM.from_pretrained("t5-large")
+tokenizer = transformers.AutoTokenizer.from_pretrained("t5-large", mask_token="<extra_id_0>")
+task_accs = evaluator.evaluate(model, tokenizer, task_infos, model_arch="encoder-decoder", device=device)
+print(task_accs)
+```
+
 ### Tested Models:
 * BERT
 * RoBERTa

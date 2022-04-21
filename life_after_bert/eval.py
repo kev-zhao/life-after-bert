@@ -244,7 +244,7 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
 
 class LaBEvaluator:
     """
-    Evaluates model on all zero-shot oLMpics MLM tasks.  # TODO: add Ettinger tasks
+    Evaluates model on the list of tasks pasted into `.evaluate()`
     Constructor takes in no arguments, `evaluator = LaBEvaluator()`
     """
     ARCH_TO_FUNCTION = {

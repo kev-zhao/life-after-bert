@@ -8,4 +8,5 @@ setup(
     version="0.1",
     url="https://github.com/kev-zhao/life-after-bert",
     install_requires=requirements,
+    packages=["life_after_bert"],
 )

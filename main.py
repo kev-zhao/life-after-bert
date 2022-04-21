@@ -1,10 +1,20 @@
 import argparse
+import logging
+import os, sys
 
 import torch
 import transformers
 
 from life_after_bert import LaBEvaluator
 
+
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+    stream=sys.stdout,
+)
+logger = logging.getLogger(os.path.basename(__file__))
 
 ARCH_TO_CLASS = {
     "encoder": transformers.AutoModelForMaskedLM,
@@ -33,7 +43,6 @@ def get_args():
         help='Tokenizer mask token (string), if different from default. '
              'Mainly used for GPT2 ("[MASK]") and T5 ("<extra_id_0>").'
     )
-    parser.add_argument("--task", default="oLMpics MLM", help="Type of task, among `oLMpics MLM`")  # TODO: add more tasks
 
     return parser.parse_args()
 
@@ -49,7 +58,8 @@ def main(args):
         tokenizer = transformers.AutoTokenizer.from_pretrained(args.model_name, mask_token=args.mask_token)
 
     evaluator = LaBEvaluator()
-    evaluator.evaluate(model, tokenizer, TASK_INFOS, model_arch=args.model_arch, device=device)
+    task_accs = evaluator.evaluate(model, tokenizer, TASK_INFOS, model_arch=args.model_arch, device=device)
+    logger.info(task_accs)
 
 
 if __name__ == '__main__':

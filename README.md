@@ -22,18 +22,16 @@ pip install -e .
 
 ## Run
 ```bash
-usage: main.py [-h] [--model_name MODEL_NAME] [--model_arch MODEL_ARCH] [--mask_token MASK_TOKEN] [--task TASK]
+usage: main.py [-h] --model_name MODEL_NAME --model_arch MODEL_ARCH [--mask_token MASK_TOKEN]
 
 optional arguments:
   -h, --help            show this help message and exit
   --model_name MODEL_NAME
                         Identifier of any pretrained HuggingFace model
   --model_arch MODEL_ARCH
-                        Model architecture, among `encoder`, `decoder`, and `encoder decoder`
+                        Model architecture, among `encoder`, `decoder`, and `encoder-decoder`
   --mask_token MASK_TOKEN
                         Tokenizer mask token (string), if different from default. Mainly used for GPT2 ("[MASK]") and T5 ("<extra_id_0>").
-  --task TASK           Type of task, among `oLMpics MLM`
-
 ```
 
 ### Example:
@@ -44,12 +42,14 @@ python main.py \
 ```
 **Expected output**: 
 ```
-Accuracy on Age Comparison: 0.986
-Accuracy on Always Never: 0.1357142857142857
-Accuracy on Antonym Negation: 0.746
-Accuracy on Multihop Composition: 0.28
-Accuracy on Size Comparison: 0.874
-Accuracy on Taxonomy Conjunction: 0.4540901502504174
+{
+    'Age Comparison': 0.986, 
+    'Always Never': 0.1357142857142857, 
+    'Antonym Negation': 0.744, 
+    'Multihop Composition': 0.28, 
+    'Size Comparison': 0.874, 
+    'Taxonomy Conjunction': 0.4540901502504174
+}
 ``` 
 
 ### Tested Models:

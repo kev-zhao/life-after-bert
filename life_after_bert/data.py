@@ -34,6 +34,15 @@ class MCDataset(Dataset):
     }
 
     def __init__(self, questions, choices, answer_ids, num_choices, tokenizer, max_length=26):
+        """
+        Args:
+            questions: list of questions, where each question is a string with a "[MASK]" token
+            choices: list of list of choices (string); i.e. shape of 500 x 3, if there are 500 questions with 3 choices each
+            answer_ids: index of the correct choice (integer) for each question
+            num_choices: the number of choices (integer)  # TODO: replace with len(choices[0])
+            tokenizer: HuggingFace tokenizer (to tokenize `questions` and `choices`)
+            max_length: the maximum length of all questions, questions with more tokens than max_length are are truncated
+        """
         assert tokenizer.mask_token is not None
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token

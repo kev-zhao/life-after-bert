@@ -203,9 +203,9 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
             Whether or not to use tqdm progress bar
 
     Returns: accuracy, (answers, preds)
-        accuracy - model accuracy on task
-        answers - tensor containing ground truths, only returned if output_predictions=True
-        preds - tensor containing model predictions, only returned if output_predictions=True
+        accuracy: model accuracy on task
+        answers: tensor containing ground truths, only returned if output_predictions=True
+        preds: tensor containing model predictions, only returned if output_predictions=True
     """
 
     eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, collate_fn=LaB.collate_fn, shuffle=False)
@@ -255,6 +255,30 @@ class LaBEvaluator:
 
     def evaluate(self, model, tokenizer, task_infos, model_arch, device="cpu", batch_size=16,
                  output_predictions=False, progress_bar=True):
+        """
+        Args:
+            model: Any HuggingFace Model from AutoModelForMaskedLM, AutoModelForCausalLM, or AutoModelForSeq2SeqLM
+            tokenizer: HuggingFace tokenizer
+            task_infos: List of tuples.
+                Each tuple describes a task, with two values:
+                    a string task_name_or_path to create the `MCDataset`
+                    and an integer for the number of answer choices for each question
+                Ex: [
+                    ("Age Comparison", 2),  # See life_after_bert.MCDataset.TASK_TO_FILENAME for the full list of task_names
+                    ("Multihop Composition", 3),
+                    ("tests/data/oLMpics_always_never_dev.jsonl", 5),  # Or pass in the path to a jsonl file
+                ]
+            model_arch: String specifying the model architecture, among `encoder`, `decoder`, and `encoder-decoder`
+            device: torch device to perform evaluation on
+            batch_size: number of examples per batch
+            output_predictions: Whether or not to return predictions and labels
+            progress_bar: Whether or not to use tqdm progress bar
+
+        Returns: task_accs, (task_preds)
+            task_accs: Dictionary mapping task_name to model accuracy
+            task_preds: Dictionary mapping task_name to tuple of (ground_truths, model_preds),
+                        only returned if output_predictions=True
+        """
 
         eval_fn = self.ARCH_TO_FUNCTION[model_arch.lower()]
         task_accs = {}

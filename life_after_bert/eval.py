@@ -63,9 +63,6 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
     model.to(device)
     model.eval()
 
-    if eval_dataset.task_type.lower() != "oLMpics MLM".lower():
-        raise NotImplementedError("Only oLMpics MLM is supported")
-
     for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
         all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
         choice_ids = batch.pop("choice_ids")
@@ -102,7 +99,8 @@ def evaluate_encoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
     return output
 
 
-def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
+def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16,
+                     output_predictions=True, progress_bar=True):
     """
     Evaluates any HuggingFace Decoder model.
 
@@ -139,9 +137,6 @@ def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
 
     model.to(device)
     model.eval()
-
-    if eval_dataset.task_type.lower() != "oLMpics MLM".lower():
-        raise NotImplementedError("Only oLMpics MLM is supported")
 
     for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
         mask_indices = [input_ids.tolist().index(tokenizer.mask_token_id) for input_ids in batch["input_ids"]]
@@ -181,7 +176,8 @@ def evaluate_decoder(model, tokenizer, eval_dataset, device="cpu", batch_size=16
     return output
 
 
-def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, device="cpu", batch_size=16, output_predictions=True, progress_bar=True):
+def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, device="cpu", batch_size=16,
+                             output_predictions=True, progress_bar=True):
     """
     Evaluates any HuggingFace Encoder Decoder model.
 
@@ -218,9 +214,6 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
     model.to(device)
     model.eval()
 
-    if eval_dataset.task_type.lower() != "oLMpics MLM".lower():
-        raise NotImplementedError("Only oLMpics MLM is supported")
-
     for batch in tqdm(eval_dataloader, desc="Evaluating", disable=not progress_bar):
         all_answers.extend(batch["choice_ids"].gather(1, batch["answer_id"].unsqueeze(1)).squeeze(1).tolist())
         choice_ids = batch.pop("choice_ids")
@@ -251,7 +244,7 @@ def evaluate_encoder_decoder(model, eval_dataset, static_decoder_input_ids, devi
 
 class LaBEvaluator:
     """
-    Evaluates model on all zero-shot oLMpics MLM tasks.  # TODO: more tasks
+    Evaluates model on all zero-shot oLMpics MLM tasks.  # TODO: add Ettinger tasks
     Constructor takes in no arguments, `evaluator = LaBEvaluator()`
     """
     ARCH_TO_FUNCTION = {
@@ -260,12 +253,16 @@ class LaBEvaluator:
         "encoder-decoder": evaluate_encoder_decoder
     }
 
-    def evaluate(self, model, tokenizer, task_infos, model_arch, device="cpu", batch_size=16, task_type="oLMpics MLM",
+    def evaluate(self, model, tokenizer, task_infos, model_arch, device="cpu", batch_size=16,
                  output_predictions=False, progress_bar=True):
 
         eval_fn = self.ARCH_TO_FUNCTION[model_arch.lower()]
+        task_accs = {}
+        if output_predictions:
+            task_preds = {}
+
         for i, (task_name, num_choices) in enumerate(task_infos):
-            dataset = LaB.MCDataset.load_data(task_name, num_choices, task_type, tokenizer)
+            dataset = LaB.MCDataset.load_data(task_name, num_choices, tokenizer)
             if model_arch.lower() == "encoder-decoder":
                 if i == 0:
                     logger.warning("Assuming T5.")
@@ -278,3 +275,8 @@ class LaBEvaluator:
                                   output_predictions=output_predictions, progress_bar=progress_bar)
 
             logger.info(f"Accuracy on {task_name}: {results[0]}")  # TODO: return (all_answers, all_preds)
+            task_accs[task_name] = results[0]
+            if output_predictions:
+                task_preds[task_name] = results[1]
+
+        return (task_accs, task_preds) if output_predictions else task_accs

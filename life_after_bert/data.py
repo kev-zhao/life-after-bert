@@ -20,10 +20,9 @@ logger = logging.getLogger(os.path.basename(__file__))
 
 class MCDataset(Dataset):
     """
-    Dataset for oLMpics multiple choice tasks  # TODO: add ettinger
-    Can be initialized either with `MCDataset().load_data()` for an oLMpics task,
+    Dataset for multiple choice (MC) tasks (tested on oLMpics and Ettinger but should work for all MC tasks)
+    Can be initialized either with `MCDataset().load_data()` from a file with the oLMpics jsonl format,
     Or by directly with the constructor
-    `MCDataset().load_data()` can be used for oLMpics tasks  # TODO: create/improve docstrings for this class
     """
     TASK_TO_FILENAME = {
         "Age Comparison": "oLMpics_age_comparison_dev.jsonl",
@@ -34,7 +33,7 @@ class MCDataset(Dataset):
         "Taxonomy Conjunction": "oLMpics_taxonomy_conjunction_dev.jsonl"
     }
 
-    def __init__(self, questions, choices, answer_ids, num_choices, task_type, tokenizer, max_length=26):
+    def __init__(self, questions, choices, answer_ids, num_choices, tokenizer, max_length=26):
         assert tokenizer.mask_token is not None
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -46,7 +45,6 @@ class MCDataset(Dataset):
         self.attention_mask = out["attention_mask"]
         self.answer_ids = torch.tensor(answer_ids)
         self.num_choices = num_choices
-        self.task_type = task_type
 
         tokenized_choices = []
         truncated_tokens = 0
@@ -55,7 +53,7 @@ class MCDataset(Dataset):
             output = tokenizer([" " + curr_choice for curr_choice in curr_choices], add_special_tokens=False, return_tensors="pt", max_length=1,
                                truncation=True, return_overflowing_tokens=True)
 
-            # TODO: explain below lines with commens
+            # TODO: explain below lines with comments
             mask = torch.cat([torch.ones(1, dtype=int),
                               output.overflow_to_sample_mapping[1:] - output.overflow_to_sample_mapping[:-1]])
             choice_input_ids = torch.index_select(output.input_ids, 0, torch.nonzero(mask).flatten())
@@ -68,68 +66,68 @@ class MCDataset(Dataset):
         self.choice_ids = tokenized_choices
 
     @classmethod
-    def load_data(cls, task_name_or_path, num_choices, task_type, tokenizer, data_dir=None, num_samples=-1):
-        if task_type != "oLMpics MLM":
-            raise NotImplementedError
-
-        if data_dir is None:
-            data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "tests", "data")
-
+    def load_data(cls, task_name_or_path, num_choices, tokenizer, num_samples=-1):
         if task_name_or_path in cls.TASK_TO_FILENAME.keys():
-            """ The below code is adapted from 
-            https://github.com/alontalmor/oLMpics/blob/500bdfc5779736bd7258925f53516fb126fe3245/oLMpics
-            /allennlp_models/dataset_readers/transformer_masked_lm_reader.py#L53 """
-            with open(os.path.join(data_dir, cls.TASK_TO_FILENAME[task_name_or_path]), "r") as data_file:
-                item_jsons, questions, choice_lists, answer_ids = ([] for _ in range(4))  # Initialize to empty lists
-                for line in data_file:
-                    item_jsons.append(json.loads(line.strip()))
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "tests", "data")
+            task_name_or_path = os.path.join(data_dir, cls.TASK_TO_FILENAME[task_name_or_path])
+            logger.info(f"Loading jsonl file from {task_name_or_path}")
 
-            if num_samples != -1:
-                item_jsons = random.sample(item_jsons, num_samples)
+        assert task_name_or_path.endswith(".jsonl"), "This function only works for files " \
+                                                                           "with oLMpics jsonl format. Please " \
+                                                                           "change the file extension to " \
+                                                                           "`.jsonl` to resolve this error."
 
-            for i, item_json in tqdm(enumerate(item_jsons), total=len(item_jsons), disable=True):
-                question_text = item_json["question"]["stem"]
+        """ The below code is adapted from 
+        https://github.com/alontalmor/oLMpics/blob/500bdfc5779736bd7258925f53516fb126fe3245/oLMpics
+        /allennlp_models/dataset_readers/transformer_masked_lm_reader.py#L53 """
+        with open(task_name_or_path, "r") as data_file:
+            item_jsons, questions, choice_lists, answer_ids = ([] for _ in range(4))  # Initialize to empty lists
+            for line in data_file:
+                item_jsons.append(json.loads(line.strip()))
 
-                choice_label_to_id = {}
-                choice_text_list = []
-                choice_label_list = []
+        if num_samples != -1:
+            item_jsons = random.sample(item_jsons, num_samples)
 
-                any_correct = False
+        for i, item_json in tqdm(enumerate(item_jsons), total=len(item_jsons), disable=True):
+            question_text = item_json["question"]["stem"]
 
-                for choice_id, choice_item in enumerate(item_json["question"]["choices"]):
-                    choice_label = choice_item["label"]
-                    choice_label_to_id[choice_label] = choice_id
-                    choice_text = choice_item["text"]
+            choice_label_to_id = {}
+            choice_text_list = []
+            choice_label_list = []
 
-                    choice_text_list.append(choice_text)
-                    choice_label_list.append(choice_label)
+            any_correct = False
 
-                    if item_json.get('answerKey') == choice_label:
-                        if any_correct:
-                            raise ValueError("More than one correct answer found for {item_json}!")
+            for choice_id, choice_item in enumerate(item_json["question"]["choices"]):
+                choice_label = choice_item["label"]
+                choice_label_to_id[choice_label] = choice_id
+                choice_text = choice_item["text"]
 
-                        any_correct = True
+                choice_text_list.append(choice_text)
+                choice_label_list.append(choice_label)
 
-                if not any_correct and 'answerKey' in item_json:
-                    raise ValueError("No correct answer found for {item_json}!")
+                if item_json.get('answerKey') == choice_label:
+                    if any_correct:
+                        raise ValueError("More than one correct answer found for {item_json}!")
 
-                answer_id = choice_label_to_id.get(item_json.get("answerKey"))
+                    any_correct = True
 
-                # If there are less than num_choices, pad choice_text_list with empty strings
-                if len(choice_text_list) != num_choices:
-                    choice_text_list = (choice_text_list + num_choices * [''])[:num_choices]
-                    if answer_id is not None and answer_id >= num_choices:
-                        logging.warning(f"Skipping question with more than {num_choices} answers: {item_json}")
-                        continue
+            if not any_correct:
+                raise ValueError("No correct answer found for {item_json}!")
 
-                questions.append(question_text)
-                choice_lists.append(choice_text_list)
-                answer_ids.append(answer_id)
+            answer_id = choice_label_to_id.get(item_json.get("answerKey"))
 
-            return cls(questions, choice_lists, answer_ids, num_choices, task_type, tokenizer)
+            # If there are less than num_choices, pad choice_text_list with empty strings
+            if len(choice_text_list) != num_choices:
+                choice_text_list = (choice_text_list + num_choices * [''])[:num_choices]
+                if answer_id is not None and answer_id >= num_choices:
+                    logging.warning(f"Skipping question with more than {num_choices} answers: {item_json}")
+                    continue
 
-        elif os.path.exists(task_name_or_path):
-            raise NotImplementedError
+            questions.append(question_text)
+            choice_lists.append(choice_text_list)
+            answer_ids.append(answer_id)
+
+        return cls(questions, choice_lists, answer_ids, num_choices, tokenizer)
 
     def __len__(self):
         return len(self.input_ids)
@@ -144,7 +142,7 @@ class MCDataset(Dataset):
 
 
 def collate_fn(batch):
-    """ Collate function for using MCDataset with torch DataLoader """
+    """ Collate function for using MCDataset with torch.utils.data.DataLoader """
     batch_dict = {}
     for key in batch[0].keys():
         batch_dict[key] = []

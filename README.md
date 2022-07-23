@@ -1,8 +1,9 @@
 # Life After BERT
+[arxiv.org/abs/2205.10696](https://arxiv.org/abs/2205.10696)
 
-## Introduction
-In this work, we apply a variety of models to the oLMpics benchmark and psycholinguistic probing datasets to determine the role of different factors such as architecture, directionality,
-size of the dataset, and pre-training objective on a model's linguistic capabilities.
+The code accompanying the paper **Life after BERT: What do Other Muppets Understand about Language?**
+
+In this work, we apply a variety of models to the oLMpics benchmark and psycholinguistic probing datasets to determine the role of different factors such as architecture, directionality, size of the dataset, and pre-training objective on a model's linguistic capabilities.
 
 ## Installation
 
@@ -108,3 +109,14 @@ print(task_accs)
 * BART (due to the HuggingFace implementation, this works as an encoder instead of encoder-decoder)
 * Pegasus (Seq2Seq model, not included in paper)
 * GPT2
+
+# Citation
+
+```
+@inproceedings{Lialin2022LifeAB,
+  title={Life after BERT: What do Other Muppets Understand about Language?},
+  author={Vladislav Lialin and Kevin Zhao and Namrata Shivagunde and Anna Rumshisky},
+  booktitle={ACL},
+  year={2022}
+}
+```
